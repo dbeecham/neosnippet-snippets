@@ -99,15 +99,8 @@ abbr        func() {}
 snippet     struct
 options     head
 abbr        struct {}
-    struct ${1:#:name} {
-        ${0:TARGET:data}
-    };
-
-# Typedef struct
-snippet     struct_typedef
-options     head
-    typedef struct ${1:#:name} {
-        ${0:TARGET:data}
+    struct ${1:`ProjectByFilename()`}${2:#:_something}${3:_s} {
+        ${0:TARGET:int i;}}
     };
 
 snippet     enum
@@ -295,6 +288,61 @@ options     head
      *
      * @return   ${4:return type}
      */
+
+# }}}
+
+# My own function definitions {{{
+snippet     f
+options     head
+abbr        f() {}
+	${1:int} ${2:`ProjectByFilename()`}${3:#:_something}(${4:struct `ProjectByFilename()`_s * `ProjectByFilename()`}${5:#:, args...})
+	{
+		int ret;
+
+		${0:// something...}
+
+		return 0;
+	}
+
+# }}}
+
+# syslog {{{
+snippet     err
+options     head
+abbr        syslog(LOG_ERR, "... returned %d")
+	syslog(LOG_ERR, "%s:%d:%s: ${1:func} returned %d",
+	       __FILE__, __LINE__, __func__, ${2:ret});
+
+snippet     warn
+options     head
+abbr        syslog(LOG_WARN, "... returned %d")
+	syslog(LOG_ERR, "%s:%d:%s: ${1:func} returned %d",
+	       __FILE__, __LINE__, __func__, ${2:ret});
+
+snippet     debug
+options     head
+abbr        syslog(LOG_DEBUG, "...")
+	syslog(LOG_DEBUG, "%s:%d:%s: ${1:...}",
+	       __FILE__, __LINE__, __func__);
+
+snippet     hi
+options     head
+abbr        syslog(LOG_DEBUG, "hi! ...")
+	syslog(LOG_DEBUG, "%s:%d:%s: hi! ${1:arg=%p}",
+	       __FILE__, __LINE__, __func__, ${2:arg});
+
+# }}}
+
+# exit {{{
+snippet     exit
+options     head
+abbr        exit(EXIT_FAILURE)
+	exit(EXIT_FAILURE);
+
+snippet     quit
+options     head
+abbr        exit(EXIT_SUCCESS)
+	exit(EXIT_SUCCESS);
 
 # }}}
 
