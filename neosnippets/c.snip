@@ -295,7 +295,9 @@ options     head
 snippet     f
 options     head
 abbr        f() {}
-	${1:int} ${2:`ProjectByFilename()`}${3:#:_something}(${4:struct `ProjectByFilename()`_s * `ProjectByFilename()`}${5:#:, args...})
+	${1:int} ${2:`ProjectByFilename()`}${3:#:_something} (
+        ${4:struct `ProjectByFilename()`_s * `ProjectByFilename()`}${5:#:, args...}
+    )
 	{
 		int ret;
 
@@ -304,6 +306,121 @@ abbr        f() {}
 		return 0;
 	}
 
+snippet     main
+options     head
+abbr        main() {}
+    int main(int args, char * argv[]) {
+        ${0}
+    }
+
+# }}}
+
+# signals {{{
+snippet     signal
+options     head
+abbr        // NOTE TO SELF: snippets available for signal
+	// NOTE TO SELF: snippets available for signal:
+	//   * sigblock    - set up sigprocmask with sensible stuff
+	//   * sigw        - signal event handler loop
+	//   * sigemptyset
+	//   * sigaddset
+	//   * sigprocmask
+	// Remember to #include <signal.h> (snip 'isignal') and set feature test def
+    ${1}
+
+snippet sigblock
+options head
+abbr sigprocmask(SIG_BLOCK, ...)
+	// block signals; use sigwaitinfo to synchronously receive these signals instead.
+	ret = sigemptyset(${1}${2:`ProjectByFilename()`}${3:->sigset});
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigemptyset: %s",
+                __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
+	ret = sigaddset($1$2$3, SIGPIPE);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s",
+                __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
+	ret = sigaddset($1$2$3, SIGTERM);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s",
+                __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
+	ret = sigaddset($1$2$3, SIGINT);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s",
+                __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
+	ret = sigprocmask(
+			/* how = */ SIG_BLOCK,
+			/* set = */ $1$2$3,
+			/* old = */ NULL
+	);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigprocmask: %s",
+                __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+    ${0}
+
+snippet sigd
+options head
+abbr sigwait_dispatch(...)
+    int ${1:`ProjectByFilename()`}_sigwait_dispatch (
+        struct ${2:`ProjectByFilename()`}_s * ${3:`ProjectByFilename()`},
+        siginfo_t * siginfo
+    )
+    {
+       ${0:TARGET} 
+    }
+
+snippet sigw
+options head
+abbr sigwaitinfo(...)
+	siginfo_t siginfo;
+	int signal_number = 0;
+	for (signal_number = sigwaitinfo(${1}${2:`ProjectByFilename()`}${3:->sigset}, &siginfo);
+	     signal_number != -1;
+	     signal_number = sigwaitinfo($1$2$3, &siginfo))
+	{
+		syslog(LOG_INFO, "%s:%d:%s: signal %d cought...",
+                __FILE__, __LINE__, __func__, signal_number);
+
+        ret = `ProjectByFilename()`_sigwait_dispatch($1$2, &siginfo);
+        if (ret < 0) {
+            syslog(LOG_WARNING, "%s:%d:%s: `ProjectByFilename()`_sigwait_dispatch returned %d",
+                    __FILE__, __LINE__, __func__, ret);
+            return -1;
+        }
+		// dispatch on siginfo
+		// pthread_cancel -> pthread_join?
+		// write to stderr, out?
+        ${0:TARGET}
+	}
+	if (-1 == signal_number) {
+		syslog(LOG_ERR, "%s:%d:%s: sigwaitinfo: %s",
+                __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
+# }}}
+
+# common stuff {{{
+snippet c
+options head
+abbr if (ret < 0) { ... }
+    if (ret < 0) {
+        ${0}
+    }
 # }}}
 
 # syslog {{{
@@ -316,13 +433,19 @@ abbr        syslog(LOG_ERR, "... returned %d")
 snippet     warn
 options     head
 abbr        syslog(LOG_WARN, "... returned %d")
-	syslog(LOG_ERR, "%s:%d:%s: ${1:func} returned %d",
+	syslog(LOG_WARN, "%s:%d:%s: ${1:func} returned %d",
 	       __FILE__, __LINE__, __func__, ${2:ret});
 
 snippet     debug
 options     head
 abbr        syslog(LOG_DEBUG, "...")
 	syslog(LOG_DEBUG, "%s:%d:%s: ${1:...}",
+	       __FILE__, __LINE__, __func__);
+
+snippet     info
+options     head
+abbr        syslog(LOG_INFO, "...")
+	syslog(LOG_INFO, "%s:%d:%s: ${1:...}",
 	       __FILE__, __LINE__, __func__);
 
 snippet     hi
