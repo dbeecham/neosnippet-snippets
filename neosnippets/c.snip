@@ -88,14 +88,6 @@ snippet conditional
 # }}}
 
 # Definition bodies {{{
-snippet function
-options head
-alias func
-abbr func() {}
-    ${1:void} ${2:#:func_name}(${3:void}) {
-        ${0:TARGET}
-    }
-
 snippet struct
 options head
 abbr struct {}
@@ -283,8 +275,14 @@ abbr f() {}
 	{
 		int ret = 0;
 
-		syslog(LOG_DEBUG, "%s:%d:%s: hi! ${6:`ProjectByFilename()`=%p}${7:#:,...}",
-		       __FILE__, __LINE__, __func__, ${7:`ProjectByFilename()`});
+		syslog(LOG_DEBUG, "%s:%d:%s: hi!",
+		       __FILE__, __LINE__, __func__);
+
+		if (`toupper(ProjectByFilename())`_S_SENTINEL != `ProjectByFilename()`->sentinel) {
+			syslog(LOG_ERR, "%s:%d:%s: sentinel is wrong!",
+				   __FILE__, __LINE__, __func__);
+			return -1;
+		}
 
 		${0:// something...}
 
@@ -315,8 +313,8 @@ abbr main() {}
 		int ret = 0;
 
 		openlog("${1:`ProjectByFilename()`}", LOG_CONS | LOG_PID, LOG_USER);
-		syslog(LOG_INFO, __FILE__ ":%d:" __func__ ": hi!",
-		       __LINE__);
+		syslog(LOG_INFO, "%s:%d:%s: hi!",
+		       __FILE__, __LINE__, __func__);
 
 		${0}
 
@@ -392,6 +390,24 @@ abbr // NOTE TO SELF: snippets available for signal
 	//   * sigprocmask
 	// Remember to #include <signal.h> (snip 'isignal') and set feature test def
     ${1}
+
+snippet sigset
+options head
+abbr sigemptyset(); sigaddset();
+	ret = sigemptyset(${1}${2:`ProjectByFilename()`}${3:->sigset});
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigemptyset: %s",
+                __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
+	ret = sigaddset($1$2$3, SIGINT);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s",
+                __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
 
 snippet sigblock
 options head
@@ -518,7 +534,7 @@ abbr epoll_ctl(EPOLL_CTL_ADD, ...)
 		EPOLL_CTL_ADD,
 	    ${3:fd},
 		&(struct epoll_event){
-			.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP | EPOLLONESHOT,
+			.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLONESHOT,
 			.data = {
 				.fd = $3
 			}
@@ -558,7 +574,7 @@ abbr epoll_ctl(EPOLL_CTL_MOD, ...)
 		EPOLL_CTL_MOD,
 		${3:fd},
 		&(struct epoll_event){
-			.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLHUP | EPOLLET | EPOLLONESHOT,
+			.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET | EPOLLONESHOT,
 			.data = {
 				.fd = $3
 			}
@@ -576,13 +592,15 @@ abbr epoll_wait(...)
 	int ep_num_events = 0;
 	struct epoll_event events[EPOLL_NUM_EVENTS];
 	for (ep_num_events = epoll_wait(${1:`ProjectByFilename()`}${2:->epoll_fd}, events, EPOLL_NUM_EVENTS, -1);
-	     ep_num_events > 0;
+	     ep_num_events > 0 || (-1 == ep_num_events && EINTR == errno);
 	     ep_num_events = epoll_wait($1$2, events, EPOLL_NUM_EVENTS, -1))
 	{
 		// (snippet: epev)
 		ret = ${3:`ProjectByFilename()`}_epoll_handle_events(${4:`ProjectByFilename()`}, events, ep_num_events);
-		if (-1 == ret) {
-			break;
+		if (ret < 0) {
+            syslog(LOG_ERR, "%s:%d:%s: $3_epoll_handle_events returned %d",
+                   __FILE__, __LINE__, __func__, ret);
+            return -1;
 		}
 	}
 	if (-1 == ep_num_events) {
@@ -607,6 +625,8 @@ abbr int epoll_handle_events(...) {...}
 			// (snippet: epdisp)
 			ret = $1_epoll_event_dispatch($3, &epoll_events[i]);
 			if (0 != ret) {
+				syslog(LOG_ERR, "%s:%d:%s: $1_epoll_event_dispatch returned %d",
+					   __FILE__, __LINE__, __func__, ret);
 				return ret;
 			}
 		}
@@ -644,21 +664,95 @@ abbr fd = open(...)
 	}
 	${0}
 # }}}
+
 # common stuff {{{
+snippet istd
+options head
+abbr #include <common stuff>
+	#define _POSIX_C_SOURCE 201805L
+	#ifdef DEBUG
+	#warning Building in DEBUG mode.
+	#endif
+	#ifdef DEV
+	#warning Building in DEV mode.
+	#endif
+	
+	#include <features.h>
+	#include <stdlib.h>
+	#include <unistd.h>
+	#include <stdbool.h>
+	#include <stdint.h>
+	#include <syslog.h>
+	#include <errno.h>
+	#include <string.h>
+	${0}
+
 snippet c
 options head
 abbr if (ret < 0) { ... }
     if (ret < 0) {
         ${0}
     }
+snippet sentinel
+options head
+abbr if (sentinel is wrong)...
+	if (`toupper(ProjectByFilename())`_S_SENTINEL != `ProjectByFilename()`->sentinel) {
+		syslog(LOG_ERR, "%s:%d:%s: sentinel is wrong!",
+			   __FILE__, __LINE__, __func__);
+		return -1;
+	}
+	${0}
+# }}}
+
+# timerfd {{{
+snippet timerfd
+options head
+abbr // timerfd...
+	// NOTE TO SELF: snippets available for timerfd:
+	//   * timerfdc - create a timerfd
+	//   * timerfds - timerfd_settime
+	// Remember to #include <sys/timerfd.h> (snip 'itimerfd')
+	${0}
+snippet timerfdc
+options head
+abbr ret = timerfd_create(...);
+	${1:`ProjectByFilename()`}${2:->timer_fd} = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TDF_NONBLOCK);
+	if ($1$2 < 0) {
+		syslog(LOG_ERR, "%s:%d:%s: timerfd_create: %s",
+			   __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet timerfds
+options head
+abbr ret = timerfd_settime(...)
+	ret = timerfd_settime(
+		/* fd = */ ${1:`ProjectByFilename()`}${2:->timer_fd},
+		/* opt = */ 0,
+		/* timerspec = */ &(struct itimerspec) {
+			.it_interval = {0},
+			.it_value = {
+				.tv_sec = ${3:10},
+				.tv_nsec = ${5:0}
+			}
+		},
+		/* old_ts = */ NULL
+	);
+	if (ret < 0) {
+		syslog(LOG_ERR, "%s:%d:%s: timerfd_settime: %s",
+			   __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
 # }}}
 
 # syslog {{{
 snippet err
 options head
-abbr syslog(LOG_ERR, "... returned %d")
-	syslog(LOG_ERR, "%s:%d:%s: ${1:func} returned %d",
-	       __FILE__, __LINE__, __func__, ${2:ret});
+abbr syslog(LOG_ERR, "...")
+	syslog(LOG_ERR, "%s:%d:%s: ${1:#:...}",
+	       __FILE__, __LINE__, __func__${2:#:, ...});
+	${0}
 
 snippet warn
 options head
@@ -687,9 +781,86 @@ abbr syslog(LOG_CRIT, "...")
 snippet hi
 options head
 abbr syslog(LOG_DEBUG, "hi! ...")
-	syslog(LOG_DEBUG, "%s:%d:%s: hi! ${1:arg=%p}",
-	       __FILE__, __LINE__, __func__, ${2:arg});
+	syslog(LOG_DEBUG, "%s:%d:%s: hi!${1:#: arg=%p}",
+	       __FILE__, __LINE__, __func__,${2:#: arg});
 
+# }}}
+
+# sleep {{{
+snippet sleep
+options head
+alias nanosleep usleep
+	struct timespec req = {
+		.tv_sec = 1,
+		.tv_nsec = 0
+	};
+	nanosleep(&req, &req);
+# }}}
+
+# signalfd {{{
+snippet signalfd
+options head
+	ret = signalfd(${1:`ProjectByFilename()`}${2:->signal_fd}, ${3:`ProjectByFilename()`}${4:->sigset}, SFD_NONBLOCK | SFD_CLOEXEC);
+	if (ret < 0) {
+		syslog(LOG_ERR, "%s:%d:%s: signalfd: %s",
+			   __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+# }}}
+
+# fork stuff {{{
+snippet fork
+options head
+abbr pid = fork()...
+	pid_t pid;
+	switch (pid = fork()) {
+		case -1:
+			syslog(LOG_ERR, "%s:%d:%s: fork: %s",
+			       __FILE__, __LINE__, __func__,
+			       strerror(errno));
+			break;
+
+		case 0:
+			break;
+
+		default:
+			
+	}
+snippet waitpid
+options head
+	ret = waitpid(pid, &child_ret, 0);
+snippet sv
+options head
+	pid_t pid;
+	switch (pid = fork()) {
+		case -1:
+			syslog(LOG_ERR, "%s:%d:%s: fork: %s",
+			       __FILE__, __LINE__, __func__,
+			       strerror(errno));
+			break;
+
+		case 0: {
+            // Set process name (this can be 16 chars max; see prctl(2))
+            char process_name[16];
+            snprintf(process_name, 16, "sv:%s", name);
+            if (-1 == prctl(PR_SET_NAME, process_name)) {
+                syslog(LOG_WARNING, "%s:%d:%s: prctl: %s",
+                        __FILE__, __LINE__, __func__, strerror(errno));
+            }
+
+			sv();
+
+			syslog(LOG_ERR, "%s:%d:%s: sv returned",
+			       __FILE__, __LINE__, __func__);
+			exit(EXIT_FAILURE);
+
+		}
+		break;
+
+		default: 
+			return pid;
+	}
 # }}}
 
 # exit {{{
@@ -704,5 +875,133 @@ abbr        exit(EXIT_SUCCESS)
 	exit(EXIT_SUCCESS);
 
 # }}}
+
+# socket stuff {{{
+snippet iserver
+options head
+abbr #include <server stuff>
+	#include <netdb.h>
+	#include <netinet/in.h>
+	#include <sys/types.h>
+	#include <sys/socket.h>
+
+snippet server
+options head
+abbr getaddrinfo(); socket(); bind(); listen();
+	// use snippet iserver for includes
+    struct addrinfo *servinfo, *p;
+	struct addrinfo hints = {
+		.ai_family = AF_UNSPEC,
+		.ai_socktype = SOCK_STREAM
+	};
+
+	/* Get server information. */
+	ret = getaddrinfo(HOST, PORT, &hints, &servinfo);
+	if (0 != ret) {
+		/* Failed to get address information. Print an error message,
+		 * sleep for an hour and then try again. */
+		syslog(LOG_ERR, "%s:%d:%s: getaddrinfo: %s",
+		       __FILE__, __LINE__, __func__, gai_strerror(ret));
+		return -1;
+	}
+
+	for (p = servinfo; p != NULL; p = p->ai_next) {
+		${1:sockfd} = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (-1 == $1) {
+			syslog(LOG_WARNING, "%s:%d:%s: socket: %s",
+				   __FILE__, __LINE__, __func__, strerror(errno));
+			continue;
+		}
+
+		int yes = 1;
+		if (-1 == setsockopt($1, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int))) {
+			syslog(LOG_WARNING, "%s:%d:%s: setsockopt: %s",
+				   __FILE__, __LINE__, __func__, strerror(errno));
+		}
+
+		if (-1 == bind($1, p->ai_addr, p->ai_addrlen)) {
+			syslog(LOG_WARNING, "%s:%d:%s: bind: %s",
+				   __FILE__, __LINE__, __func__, strerror(errno));
+			close($1);
+			continue;
+		}
+
+		break;
+
+	}
+	freeaddrinfo(servinfo);
+
+	if (NULL == p) {
+		syslog(LOG_ERR, "%s:%d:%s: bind failed!",
+		       __FILE__, __LINE__, __func__);
+		return -1;
+	}
+
+	if (-1 == listen($1, BACKLOG)) {
+	    syslog(LOG_ERR, "%s:%d:%s: listen: %s",
+		       __FILE__, __LINE__, __func__, strerror(errno));
+		close($1);
+		return -1;
+	}
+	
+	${0}
+
+snippet accept
+options head
+abbr accept(...)
+    struct sockaddr_storage their_addr;
+    socklen_t sin_size;
+
+    sin_size = sizeof(their_addr);
+    client_fd = accept(event->data.fd, (struct sockaddr *)&their_addr, &sin_size);
+    if (client_fd < 0) {
+        syslog(LOG_WARNING, "%s:%d:%s: accept: %s",
+               __FILE__, __LINE__, __func__, strerror(errno));
+        return -1;
+    }
+
+# }}}
+
+# pthread {{{
+snippet ipthread
+options head
+abbr #include <pthread.h>
+	#include <pthread.h>
+	${0}
+snippet pthread
+options head
+abbr // pthread...
+	// NOTE TO SELF: snippets available for pthread:
+	//   * pthreadc - pthread_create
+	// Remember to #include <pthread.h> (snip 'ipthread')
+	${0}
+snippet pthreadc
+options head
+abbr pthread_create(...)
+	ret = pthread_create(
+		/* thread = */ ${1:`ProjectByFilename()`}${2:->my_task.thread},
+		/* attr = */ NULL,
+		/* function = */ ${3:my_task},
+		/* arg = */ ${4:`ProjectByFilename()`}
+	);
+	if (ret < 0) {
+		syslog(LOG_ERR, "%s:%d:%s: pthread_create: %s",
+		       __FILE__, __LINE__, __func__, strerror(ret));
+		return -1;
+	}
+# }}}
+
+# pipe {{{
+snippet pipe
+options head
+abbr pipe(...)
+	ret = pipe(${1:`ProjectByFilename()`}${2:->my_ipc});
+	if (ret < 0) {
+		syslog(LOG_ERR, "%s:%d:%s: pipe: %s",
+			   __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+# }}}
+
 
 # vim: fdm=marker
