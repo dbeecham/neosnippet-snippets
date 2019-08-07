@@ -800,8 +800,12 @@ alias nanosleep usleep
 # signalfd {{{
 snippet signalfd
 options head
-	ret = signalfd(${1:`ProjectByFilename()`}${2:->signal_fd}, ${3:`ProjectByFilename()`}${4:->sigset}, SFD_NONBLOCK | SFD_CLOEXEC);
-	if (ret < 0) {
+	${1:`ProjectByFilename()`}${2:->signal_fd} = signalfd(
+		/* old fd = */ -1,
+		/* sigset = */ ${3:`ProjectByFilename()`}${4:->sigset},
+		/* flags = */ SFD_NONBLOCK | SFD_CLOEXEC
+	);
+	if ($1$2 < 0) {
 		syslog(LOG_ERR, "%s:%d:%s: signalfd: %s",
 			   __FILE__, __LINE__, __func__, strerror(errno));
 		return -1;
