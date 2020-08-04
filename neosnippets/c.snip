@@ -346,6 +346,7 @@ snippet epc
 		syslog(LOG_ERR, "%s:%d:%s: epoll_create1: %s", __FILE__, __LINE__, __func__, strerror(errno));
 		return -1;
 	}
+    ${0}
 snippet epa
 	ret = epoll_ctl(
 		${1:`vim_snippets#Filename('$1')`->epoll_fd},
