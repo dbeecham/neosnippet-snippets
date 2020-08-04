@@ -1,99 +1,98 @@
 # Control structures {{{
-snippet if
-options head
-abbr if () {}
-    if (${1:#:condition}) {
+snippet     if
+options     head
+abbr        if () {}
+    if (${1:-1 == ret}) {
         ${0:TARGET}
     }
 
+snippet     iff
+options     head
+abbr        if () 
+    if (${1:-1 == ret})
+        ${0:TARGET}
+
 # No head option in else/elseif so it can be expanded after "}"
-snippet else
-abbr else {}
+snippet     else
+abbr        else {}
     else {
         ${0:TARGET}
     }
 
-snippet elseif
-abbr else () {}
+snippet     elif
+abbr        else () {}
     else if (${1:#:condition}) {
         ${0:TARGET}
     }
 
-snippet ifelse
-options head
-abbr if () {} else {}
-    if (${1:#:condition}) {
-        ${2:TARGET}
-    } else {
-        ${3}
-    }
-
-snippet for
-options head
-abbr for () {}
+snippet     for
+options     head
+abbr        for () {}
     for (${1:int} ${2:i} = ${3:0}; $2 < ${4}; $2++) {
         ${0:#:TARGET}
     }
 
 # Counter based for's (don't ask for the type or count start)
-snippet fori
-options head
-abbr for (int x;...; x++) {}
+snippet     fori
+options     head
+abbr        for (int x;...; x++) {}
     for (int ${1:i} = 0; $1 < ${2}; $1++) {
         ${0:#:TARGET}
     }
 
 # For reverse counter
-snippet forri
-options head
-abbr for (int x; ...; x--) {}
+snippet     forri
+options     head
+abbr        for (int x; ...; x--) {}
     for (int ${1:i} = ${2}; $1 >= 0; $1--) {
         ${0:#:TARGET}
     }
 
-snippet while
-options head
-abbr while () {}
+snippet     while
+options     head
+abbr        while () {}
     while (${1:#:condition}) {
         ${0:TARGET}
     }
 
-snippet do_while
-options head
-alias do
-    do {
-        ${0:TARGET:code}
-    } while (${1:#:condition});
-
-snippet switch
-options head
-abbr switch () {}
+snippet     switch
+options     head
+abbr        switch () {}
 	switch (${1:#:var}) {
 		case ${2:#:val}:
 			${0:TARGET}
 			break;
 	}
 
-snippet case
-options head
-abbr case: break;
+snippet     case
+options     head
+abbr        case: break;
 	case ${1}:
 		${0}
 		break;
 
-# Ternary conditional operator
-snippet conditional
-    (${1:#:condition}) ? ${2:#:a} : ${3:#:b}
-
 # }}}
 
 # Definition bodies {{{
-snippet struct
-options head
-abbr struct {}
-	struct ${1:`ProjectByFilename()`}${2:#:_something}${3:_s} {
-		${0:int fd;}
-	};
+snippet f
+	${1:int} ${2:`ProjectName()`}${3:} (
+		${4:struct `ProjectName()`_s * `ProjectName()`}${5:#:,args...}
+	)
+	{
+
+		int ret = 0;
+
+		${0}
+
+		return 0;
+	}
+
+snippet     struct
+options     head
+abbr        struct {}
+    struct ${1:#:name} {
+        ${0:TARGET:data}
+    };
 
 snippet     enum
 options     head
@@ -102,6 +101,15 @@ abbr        enum {}
         ${0:TARGET}
     };
 
+# hard-tab is necessary; C indent doesn't support this.
+snippet     main
+options     head
+	int main(int argc, char const* argv[])
+	{
+		${0:TARGET}
+		return 0;
+	}
+
 # }}}
 
 # Preprocessing directives {{{
@@ -109,13 +117,13 @@ abbr        enum {}
 snippet     inc
 options     head
 alias       #inc, #include
-    #include <${1:stdio}.h>${0}
+    #include <${1:stdio}.h>
 
 # #include "..."
-snippet     inc2
+snippet     Inc
 options     head
-alias       #inc2, #include2
-    #include "${1}.h"${0}
+alias       #Inc
+    #include "${1}.h"
 
 snippet     ifdef
 options     head
@@ -133,20 +141,11 @@ abbr #ifndef ... #define ... #endif
     #define ${1:#:SYMBOL}
     #endif${0}
 
+# This snippet used the placeholder instead of a trailing space
 snippet     def
 options     head
 alias       #def, #define
-    #define
-
-# Include-Guard
-snippet     once
-options     head
-abbr        include-guard
-    #ifndef ${1:#:SYMBOL}
-        #define $1
-
-        ${0:TARGET}
-    #endif /* end of include guard */
+    #define ${1}
 
 # }}}
 
@@ -244,768 +243,200 @@ abbr    va_start(va_list, last_arg); ... ; va_end()
 	va_end($1);
 # }}}
 
-# Comments {{{
-snippet comment
-alias   /*
-    /* ${1:#:comment} */
-    ${0}
-
-snippet     doxy
-abbr        /** @brief ...
-options     head
-    /**
-     * @brief    ${1:function description}
-     *
-     * @details  ${2:detailed description}
-     *
-     * @param    ${3:param}
-     *
-     * @return   ${4:return type}
-     */
-
+# syslog {{{
+snippet openlog
+options head
+	openlog("${1:`ProjectName()`}", LOG_CONS | LOG_PID, LOG_USER);
+snippet syslog
+options head
+	// NOTE TO SELF: snippets available for syslog:
+	//   * openlog - opens syslog
+	//   * err     - syslog() error message
+    //   * warn    - syslog() warning message
+	//   * info    - syslog() info message
+    //   * debug   - syslog() debug message
+    //   * hi      - syslog() debug hi message
+	// Remember to #include <syslog.h> (snip 'isyslog')
+snippet err
+options head
+	syslog(LOG_ERR, "%s:%d:%s: ${1:msg}", __FILE__, __LINE__, __func__${2:#:, strerror(errno), ...});${0}
+snippet warn
+options head
+	syslog(LOG_WARNING, "%s:%d:%s: ${1:func}: %s", __FILE__, __LINE__, __func__, strerror(errno));${0}
+snippet info
+options head
+	syslog(LOG_INFO, "%s:%d:%s: ${1:#:msg}", __FILE__, __LINE__, __func__${2:#:, args...});${0}
+snippet debug
+options head
+    syslog(LOG_DEBUG, "%s:%d:%s: ${1:#:msg}", __FILE__, __LINE__, __func__${2:#:, args..});${0}
+snippet hi
+options head
+    syslog(LOG_DEBUG, "%s:%d:%s: hi!", __FILE__, __LINE__, __func__);
 # }}}
 
-# My own function definitions {{{
-snippet f
-options head
-abbr f() {}
-	${1:int} ${2:`ProjectByFilename()`}${3:#:_something} (
-		${4:struct `ProjectByFilename()`_s * `ProjectByFilename()`}${5:#:, args...}
-	)
-	{
-		int ret = 0;
-
-		syslog(LOG_DEBUG, "%s:%d:%s: hi!",
-		       __FILE__, __LINE__, __func__);
-
-		if (`toupper(ProjectByFilename())`_S_SENTINEL != `ProjectByFilename()`->sentinel) {
-			syslog(LOG_ERR, "%s:%d:%s: sentinel is wrong!",
-				   __FILE__, __LINE__, __func__);
-			return -1;
-		}
-
-		${0:// something...}
-
-		return 0;
-	}
-
-
-snippet C
-options head
-abbr ret = f(); if (ret < 0) { ... }
-	ret = ${1:`ProjectByFilename()`}${2:_init}(${3:#:&}${4:`ProjectByFilename()`}${5:#:, args...});
-	if (ret < 0) {
-		syslog(LOG_ERR, "%s:%d:%s: $1$2 returned %d",
-			   __FILE__, __LINE__, __func__, ret);
+# basic fd stuff {{{
+snippet read
+    bytes_read = read(${1:fd}, ${2:buf}, ${3:buf_len});
+    if (-1 == bytes_read) {
+		syslog(LOG_ERR, "%s:%d:%s: read: %s", __FILE__, __LINE__, __func__, strerror(errno));
 		return -1;
-	}
-	${0}
-
-snippet main
-options head
-abbr main() {}
-	int main (
-		int argc,
-		char * argv[]
-	)
-	{
-
-		int ret = 0;
-
-		openlog("${1:`ProjectByFilename()`}", LOG_CONS | LOG_PID, LOG_USER);
-		syslog(LOG_INFO, "%s:%d:%s: hi!",
-		       __FILE__, __LINE__, __func__);
-
-		${0}
-
-		return 0;
-	}
-
-# }}}
-
-# My library stuff {{{
-
-snippet nats_request
-options head
-abbr    nats_request(...)
-	ret = nats_request(
-		/* nats = */ nats,
-		/* topic = */ ${1:0},
-		/* topic_len = */ ${2:0},
-		/* callback = */ ${3:0},
-		/* timeout = */ ${4:0},
-		/* request = */ (struct nats_request_s) {
-			.data = ${5:0},
-			.data_len = ${6:0},
-			.user_data = ${7:0},
-			.timeout_cb = ${8:0}
-		}
-	);
-	${0}
-
-snippet nats_publish
-options head
-abbr    nats_publish(...)
-	ret = nats_publish(
-		/* nats = */ nats,
-		/* topic = */ ${1:0},
-		/* topic_len = */ ${2:0},
-		/* data = */ ${3:0},
-		/* data_len = */ ${4:0}
-	);
-	${0}
-
-snippet nats_register_subscription
-options head
-abbr nats_register_subscription(...)
-	ret = nats_register_subscription(
-		/* struct nats_app_s * const nats = */ ${1:&nats},
-		/* const char * const topic = */ ${2:0}, 
-		/* const ssize_t topic_len, */ ${3:0},
-		/* void (*nats_msg_cb)(
-			const nats_app_t * const nats,
-			const nats_msg_t * const msg,
-			void * user_data
-		) = */ ${4:0}
-	);
-	${0}
-
-snippet nats_run
-options head
-abbr nats_run(...)
-	ret = nats_run(${1:&nats});
-	${0}
-
-# }}}
-
-# signals {{{
-snippet signal
-options head
-abbr // NOTE TO SELF: snippets available for signal
-	// NOTE TO SELF: snippets available for signal:
-	//   * sigblock    - set up sigprocmask with sensible stuff
-	//   * sigw        - signal event handler loop
-	//   * sigemptyset
-	//   * sigaddset
-	//   * sigprocmask
-	// Remember to #include <signal.h> (snip 'isignal') and set feature test def
-    ${1}
-
-snippet sigset
-options head
-abbr sigemptyset(); sigaddset();
-	ret = sigemptyset(${1}${2:`ProjectByFilename()`}${3:->sigset});
-	if (-1 == ret) {
-		syslog(LOG_ERR, "%s:%d:%s: sigemptyset: %s",
-                __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-
-	ret = sigaddset($1$2$3, SIGINT);
-	if (-1 == ret) {
-		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s",
-                __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-	${0}
-
-snippet sigblock
-options head
-abbr sigprocmask(SIG_BLOCK, ...)
-	// block signals; use sigwaitinfo to synchronously receive these signals instead.
-	ret = sigemptyset(${1}${2:`ProjectByFilename()`}${3:->sigset});
-	if (-1 == ret) {
-		syslog(LOG_ERR, "%s:%d:%s: sigemptyset: %s",
-                __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-
-	ret = sigaddset($1$2$3, SIGPIPE);
-	if (-1 == ret) {
-		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s",
-                __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-
-	ret = sigaddset($1$2$3, SIGTERM);
-	if (-1 == ret) {
-		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s",
-                __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-
-	ret = sigaddset($1$2$3, SIGINT);
-	if (-1 == ret) {
-		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s",
-                __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-
-	ret = sigprocmask(
-			/* how = */ SIG_BLOCK,
-			/* set = */ $1$2$3,
-			/* old = */ NULL
-	);
-	if (-1 == ret) {
-		syslog(LOG_ERR, "%s:%d:%s: sigprocmask: %s",
-                __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-    ${0}
-
-snippet sigd
-options head
-abbr sigwait_dispatch(...)
-    int ${1:`ProjectByFilename()`}_sigwait_dispatch (
-        struct ${2:`ProjectByFilename()`}_s * ${3:`ProjectByFilename()`},
-        siginfo_t * siginfo
-    )
-    {
-       ${0:TARGET} 
     }
+    if (0 == bytes_read) {
+        ${4}
+    }
+    ${0}
+# }}}
 
-snippet sigw
-options head
-abbr sigwaitinfo(...)
-	siginfo_t siginfo;
-	int signal_number = 0;
-	for (signal_number = sigwaitinfo(${1}${2:`ProjectByFilename()`}${3:->sigset}, &siginfo);
-	     signal_number != -1;
-	     signal_number = sigwaitinfo($1$2$3, &siginfo))
-	{
-		syslog(LOG_INFO, "%s:%d:%s: signal %d cought...",
-                __FILE__, __LINE__, __func__, signal_number);
-
-        ret = `ProjectByFilename()`_sigwait_dispatch($1$2, &siginfo);
-        if (ret < 0) {
-            syslog(LOG_WARNING, "%s:%d:%s: `ProjectByFilename()`_sigwait_dispatch returned %d",
-                    __FILE__, __LINE__, __func__, ret);
-            return -1;
-        }
-		// dispatch on siginfo
-		// pthread_cancel -> pthread_join?
-		// write to stderr, out?
-        ${0:TARGET}
-	}
-	if (-1 == signal_number) {
-		syslog(LOG_ERR, "%s:%d:%s: sigwaitinfo: %s",
-                __FILE__, __LINE__, __func__, strerror(errno));
+# socket {{{
+	struct addrinfo *servinfo, *servinfo_p;
+	ret = getaddrinfo(
+		/* host = */ "${1:127.0.0.1}",
+		/* port = */ "${2:4222}",
+		/* hints = */ &(struct addrinfo) {
+			.ai_family = AF_UNSPEC,
+			.ai_socktype = SOCK_STREAM,
+			.ai_flags = AI_PASSIVE
+		},
+		/* servinfo = */ &servinfo
+	);
+	if (0 != ret) {
+		syslog(LOG_ERR, "%s:%d:%s: getaddrinfo: %s", __FILE__, __LINE__, __func__, gai_strerror(ret));
 		return -1;
 	}
 
+	// Loop over the results from getaddrinfo and try to connect
+	for (servinfo_p = servinfo; servinfo_p != NULL; servinfo_p = servinfo_p->ai_next) {
+		${3:`ProjectName()`->sock_fd} = socket(servinfo_p->ai_family, servinfo_p->ai_socktype, servinfo_p->ai_protocol);
+		if (-1 == $3) {
+			syslog(LOG_WARNING, "%s:%d:%s: socket: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			continue;
+		}
+
+		ret = connect($3, servinfo_p->ai_addr, servinfo_p->ai_addrlen);
+		if (-1 == ret) {
+			syslog(LOG_WARNING, "%s:%d:%s: connect: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			close($3);
+			continue;
+		}
+
+		break;
+	}
+	if (NULL == servinfo_p) {
+		syslog(LOG_ERR, "%s:%d:%s: failed to connect", __FILE__, __LINE__, __func__);
+		return -1;
+	}
+	freeaddrinfo(servinfo);
+	$0
 # }}}
 
 # epoll {{{
 snippet epoll
 options head
-abbr // epoll...
-	// note to self: snippets available for epoll:
+	// NOTE TO SELF: snippets available for epoll:
 	//   * epc - create epoll
 	//   * epa - add fd to epoll
 	//   * epd - delete fd from epoll
 	//   * epm - modify (re-arm) fd in epoll
 	//   * epw - main epoll_wait loop
-	// to use epoll, remember to #include <sys/epoll.h> (snip 'iep')
-	${0}
-
-snippet iep
-options head
-abbr #include <sys/epoll.h>
-	#include <sys/epoll.h>
-	${0}
-
+	// To use epoll, remember to #include <sys/epoll.h> (snip 'iepoll')
 snippet epc
-options head
-abbr epoll_create(...)
 	// Create the epoll instance
-	${1:`ProjectByFilename()`}${2:->epoll_fd} = epoll_create1(EPOLL_CLOEXEC);
-	if (-1 == $1$2) {
-		syslog(LOG_ERR, "%s:%d:%s: epoll_create1: %s", 
-		       __FILE__, __LINE__, __func__, strerror(errno));
+	${1:`ProjectName()`->epoll_fd} = epoll_create1(EPOLL_CLOEXEC);
+	if (-1 == $1) {
+		syslog(LOG_ERR, "%s:%d:%s: epoll_create1: %s", __FILE__, __LINE__, __func__, strerror(errno));
 		return -1;
 	}
-
-	${0}
 snippet epa
-options head
-abbr epoll_ctl(EPOLL_CTL_ADD, ...)
 	ret = epoll_ctl(
-		${1:`ProjectByFilename()`}${2:->epoll_fd},
+		${1:`vim_snippets#Filename('$1')`->epoll_fd},
 		EPOLL_CTL_ADD,
-	    ${3:fd},
+	    ${2:fd},
 		&(struct epoll_event){
 			.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLONESHOT,
 			.data = {
-				.fd = $3
+				.fd = $2
 			}
 		}
 	);
 	if (-1 == ret) {
-		syslog(LOG_ERR, "%s:%d:%s: epoll_ctl: %s", 
-		       __FILE__, __LINE__, __func__, strerror(errno));
+		syslog(LOG_ERR, "%s:%d:%s: epoll_ctl: %s", __FILE__, __LINE__, __func__, strerror(errno));
 		return -1;
 	}
-	
-	${0}
 snippet epd
-options head
-abbr epoll_ctl(EPOLL_CTL_DEL, ...)
 	// Remember to EPOLL_CTL_DEL *before* closing the file descriptor, see
 	// https://idea.popcount.org/2017-03-20-epoll-is-fundamentally-broken-22/
 	ret = epoll_ctl(
-		${1:`ProjectByFilename()`}${2:->epoll_fd},
+		${1:epoll_fd},
 		EPOLL_CTL_DEL,
-	    ${3:fd},
+	    ${2:fd},
 		NULL
 	);
 	if (-1 == ret) {
-		syslog(LOG_ERR, "%s:%d:%s: epoll_ctl: %s", 
-		       __FILE__, __LINE__, __func__, strerror(errno));
+		syslog(LOG_ERR, "%s:%d:%s: epoll_ctl: %s", __FILE__, __LINE__, __func__, strerror(errno));
 		return -1;
 	}
-	
-	${0}
 snippet epm
-options head
-abbr epoll_ctl(EPOLL_CTL_MOD, ...)
-	// Re-arm EPOLLONESHOT file descriptor in epoll
 	ret = epoll_ctl(
-		${1:`ProjectByFilename()`}${2:->epoll_fd},
+		${1:epoll_fd},
 		EPOLL_CTL_MOD,
-		${3:fd},
+	    ${2:fd},
 		&(struct epoll_event){
-			.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLET | EPOLLONESHOT,
-			.data = {
-				.fd = $3
-			}
+			.events = EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLONESHOT,
+			.data = event->data
 		}
 	);
 	if (-1 == ret) {
-		syslog(LOG_ERR, "%s:%d: epoll_ctl: %s", __func__, __LINE__, strerror(errno));
+		syslog(LOG_ERR, "%s:%d:%s: epoll_ctl: %s", __FILE__, __LINE__, __func__, strerror(errno));
 		return -1;
-	}
-
-	${0}
+	}${0}
 snippet epw
-options head
-abbr epoll_wait(...)
-	int ep_num_events = 0;
-	struct epoll_event events[EPOLL_NUM_EVENTS];
-	for (ep_num_events = epoll_wait(${1:`ProjectByFilename()`}${2:->epoll_fd}, events, EPOLL_NUM_EVENTS, -1);
-	     ep_num_events > 0 || (-1 == ep_num_events && EINTR == errno);
-	     ep_num_events = epoll_wait($1$2, events, EPOLL_NUM_EVENTS, -1))
+	int ep_events_len = 0;
+	struct epoll_event ep_events[EPOLL_NUM_EVENTS];
+	for (ep_events_len = epoll_wait(${1:`vim_snippets#Filename('$1')`->epoll_fd}, ep_events, EPOLL_NUM_EVENTS, -1);
+	     ep_events_len > 0;
+	     ep_events_len = epoll_wait($1, ep_events, EPOLL_NUM_EVENTS, -1))
 	{
 		// (snippet: epev)
-		ret = ${3:`ProjectByFilename()`}_epoll_handle_events(${4:`ProjectByFilename()`}, events, ep_num_events);
-		if (ret < 0) {
-            syslog(LOG_ERR, "%s:%d:%s: $3_epoll_handle_events returned %d",
-                   __FILE__, __LINE__, __func__, ret);
-            return -1;
+		ret = ${2:`vim_snippets#Filename('$1')`}_epoll_handle_events(${2:`vim_snippets#Filename('$1')`}, ep_events, ep_events_len);
+		if (-1 == ret) {
+			break;
 		}
 	}
-	if (-1 == ep_num_events) {
-		syslog(LOG_ERR, "%s:%d:%s: epoll_wait: %s", 
-		       __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
+	if (-1 == ep_events_len) {
+		syslog(LOG_ERR, "%s:%d:%s: epoll_wait: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		exit(EXIT_FAILURE);
 	}
-
 	${0}
 snippet epev
-options head
-abbr int epoll_handle_events(...) {...}
-	static int ${1:`ProjectByFilename()`}_epoll_handle_events (
-	    struct ${2:`ProjectByFilename()`_s} * ${3:`ProjectByFilename()`},
+	static int `ProjectName()`_epoll_handle_events (
+	    struct `ProjectName()`_s * `ProjectName()`,
 		struct epoll_event epoll_events[EPOLL_NUM_EVENTS],
-		int ep_num_events
+		int ep_events_len
 	)
 	{
 		int ret = 0;
-		for (int i = 0; i < ep_num_events; i++) {
-
+		for (int i = 0; i < ep_events_len; i++) {
 			// (snippet: epdisp)
-			ret = $1_epoll_event_dispatch($3, &epoll_events[i]);
+			ret = `ProjectName()`_epoll_event_dispatch(`ProjectName()`, &epoll_events[i]);
 			if (0 != ret) {
-				syslog(LOG_ERR, "%s:%d:%s: $1_epoll_event_dispatch returned %d",
-					   __FILE__, __LINE__, __func__, ret);
 				return ret;
 			}
 		}
 	}
-
 	${0}
 snippet epdisp
-options head
-abbr int epoll_event_dispatch(...) {...}
-	static int ${1:`ProjectByFilename()`}_epoll_event_dispatch (
-	    struct ${2:`ProjectByFilename()`_s} * ${3:`ProjectByFilename()`},
+	static int `ProjectName()`_epoll_event_dispatch (
+		struct `ProjectName()`_s * `ProjectName()`,
 		struct epoll_event * event
 	)
 	{
-		if (event->data.fd == $3->${4:fd})
-			return $1_epoll_event_$4($3, event);
+		if (event->data.fd == `ProjectName()`->fd)
+			return `ProjectName()`_epoll_event_fd(`ProjectName()`, event);
 
-		syslog(LOG_WARNING, "%s:%d:%s: No match on epoll event.",
-		       __FILE__, __LINE__, __func__);
+		syslog(LOG_WARNING, "%s:%d:%s: No match on epoll event.", __FILE__, __LINE__, __func__);
 		return 0;
 	}
-
 	${0}
 # }}}
-
-# linux stuff {{{
-snippet open
-options head
-abbr fd = open(...)
-	${1:fd} = open(${2:"/tmp/fifo"}, ${3:O_RDONLY});
-	if (-1 == $1) {
-		syslog(LOG_ERR, "%s:%d:%s: open: %s",
-			   __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-	${0}
-# }}}
-
-# common stuff {{{
-snippet istd
-options head
-abbr #include <common stuff>
-	#define _POSIX_C_SOURCE 201805L
-	#ifdef DEBUG
-	#warning Building in DEBUG mode.
-	#endif
-	#ifdef DEV
-	#warning Building in DEV mode.
-	#endif
-	
-	#include <features.h>
-	#include <stdlib.h>
-	#include <unistd.h>
-	#include <stdbool.h>
-	#include <stdint.h>
-	#include <syslog.h>
-	#include <errno.h>
-	#include <string.h>
-	${0}
-
-snippet c
-options head
-abbr if (ret < 0) { ... }
-    if (ret < 0) {
-        ${0}
-    }
-snippet sentinel
-options head
-abbr if (sentinel is wrong)...
-	if (`toupper(ProjectByFilename())`_S_SENTINEL != `ProjectByFilename()`->sentinel) {
-		syslog(LOG_ERR, "%s:%d:%s: sentinel is wrong!",
-			   __FILE__, __LINE__, __func__);
-		return -1;
-	}
-	${0}
-# }}}
-
-# timerfd {{{
-snippet timerfd
-options head
-abbr // timerfd...
-	// NOTE TO SELF: snippets available for timerfd:
-	//   * timerfdc - create a timerfd
-	//   * timerfds - timerfd_settime
-	// Remember to #include <sys/timerfd.h> (snip 'itimerfd')
-	${0}
-snippet timerfdc
-options head
-abbr ret = timerfd_create(...);
-	${1:`ProjectByFilename()`}${2:->timer_fd} = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TDF_NONBLOCK);
-	if ($1$2 < 0) {
-		syslog(LOG_ERR, "%s:%d:%s: timerfd_create: %s",
-			   __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-	${0}
-snippet timerfds
-options head
-abbr ret = timerfd_settime(...)
-	ret = timerfd_settime(
-		/* fd = */ ${1:`ProjectByFilename()`}${2:->timer_fd},
-		/* opt = */ 0,
-		/* timerspec = */ &(struct itimerspec) {
-			.it_interval = {0},
-			.it_value = {
-				.tv_sec = ${3:10},
-				.tv_nsec = ${5:0}
-			}
-		},
-		/* old_ts = */ NULL
-	);
-	if (ret < 0) {
-		syslog(LOG_ERR, "%s:%d:%s: timerfd_settime: %s",
-			   __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-	${0}
-# }}}
-
-# syslog {{{
-snippet err
-options head
-abbr syslog(LOG_ERR, "...")
-	syslog(LOG_ERR, "%s:%d:%s: ${1:#:...}",
-	       __FILE__, __LINE__, __func__${2:#:, ...});
-	${0}
-
-snippet warn
-options head
-abbr syslog(LOG_WARNING, "... returned %d")
-	syslog(LOG_WARNING, "%s:%d:%s: ${1:func} returned %d",
-	       __FILE__, __LINE__, __func__, ${2:ret});
-
-snippet debug
-options head
-abbr syslog(LOG_DEBUG, "...")
-	syslog(LOG_DEBUG, "%s:%d:%s: ${1:...}",
-	       __FILE__, __LINE__, __func__);
-
-snippet info
-options head
-abbr syslog(LOG_INFO, "...")
-	syslog(LOG_INFO, "%s:%d:%s: ${1:...}",
-	       __FILE__, __LINE__, __func__);
-
-snippet crit
-options head
-abbr syslog(LOG_CRIT, "...")
-	syslog(LOG_CRIT, "%s:%d:%s: ${1:...}",
-	       __FILE__, __LINE__, __func__);
-
-snippet hi
-options head
-abbr syslog(LOG_DEBUG, "hi! ...")
-	syslog(LOG_DEBUG, "%s:%d:%s: hi!${1:#: arg=%p}",
-	       __FILE__, __LINE__, __func__,${2:#: arg});
-
-# }}}
-
-# sleep {{{
-snippet sleep
-options head
-alias nanosleep usleep
-	struct timespec req = {
-		.tv_sec = 1,
-		.tv_nsec = 0
-	};
-	nanosleep(&req, &req);
-# }}}
-
-# signalfd {{{
-snippet signalfd
-options head
-	${1:`ProjectByFilename()`}${2:->signal_fd} = signalfd(
-		/* old fd = */ -1,
-		/* sigset = */ ${3:`ProjectByFilename()`}${4:->sigset},
-		/* flags = */ SFD_NONBLOCK | SFD_CLOEXEC
-	);
-	if ($1$2 < 0) {
-		syslog(LOG_ERR, "%s:%d:%s: signalfd: %s",
-			   __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-	${0}
-# }}}
-
-# fork stuff {{{
-snippet fork
-options head
-abbr pid = fork()...
-	pid_t pid;
-	switch (pid = fork()) {
-		case -1:
-			syslog(LOG_ERR, "%s:%d:%s: fork: %s",
-			       __FILE__, __LINE__, __func__,
-			       strerror(errno));
-			break;
-
-		case 0:
-			break;
-
-		default:
-			
-	}
-snippet waitpid
-options head
-	ret = waitpid(pid, &child_ret, 0);
-snippet sv
-options head
-	pid_t pid;
-	switch (pid = fork()) {
-		case -1:
-			syslog(LOG_ERR, "%s:%d:%s: fork: %s",
-			       __FILE__, __LINE__, __func__,
-			       strerror(errno));
-			break;
-
-		case 0: {
-            // Set process name (this can be 16 chars max; see prctl(2))
-            char process_name[16];
-            snprintf(process_name, 16, "sv:%s", name);
-            if (-1 == prctl(PR_SET_NAME, process_name)) {
-                syslog(LOG_WARNING, "%s:%d:%s: prctl: %s",
-                        __FILE__, __LINE__, __func__, strerror(errno));
-            }
-
-			sv();
-
-			syslog(LOG_ERR, "%s:%d:%s: sv returned",
-			       __FILE__, __LINE__, __func__);
-			exit(EXIT_FAILURE);
-
-		}
-		break;
-
-		default: 
-			return pid;
-	}
-# }}}
-
-# exit {{{
-snippet     exit
-options     head
-abbr        exit(EXIT_FAILURE)
-	exit(EXIT_FAILURE);
-
-snippet     quit
-options     head
-abbr        exit(EXIT_SUCCESS)
-	exit(EXIT_SUCCESS);
-
-# }}}
-
-# socket stuff {{{
-snippet iserver
-options head
-abbr #include <server stuff>
-	#include <netdb.h>
-	#include <netinet/in.h>
-	#include <sys/types.h>
-	#include <sys/socket.h>
-
-snippet server
-options head
-abbr getaddrinfo(); socket(); bind(); listen();
-	// use snippet iserver for includes
-    struct addrinfo *servinfo, *p;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM
-	};
-
-	/* Get server information. */
-	ret = getaddrinfo(HOST, PORT, &hints, &servinfo);
-	if (0 != ret) {
-		/* Failed to get address information. Print an error message,
-		 * sleep for an hour and then try again. */
-		syslog(LOG_ERR, "%s:%d:%s: getaddrinfo: %s",
-		       __FILE__, __LINE__, __func__, gai_strerror(ret));
-		return -1;
-	}
-
-	for (p = servinfo; p != NULL; p = p->ai_next) {
-		${1:sockfd} = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-		if (-1 == $1) {
-			syslog(LOG_WARNING, "%s:%d:%s: socket: %s",
-				   __FILE__, __LINE__, __func__, strerror(errno));
-			continue;
-		}
-
-		int yes = 1;
-		if (-1 == setsockopt($1, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int))) {
-			syslog(LOG_WARNING, "%s:%d:%s: setsockopt: %s",
-				   __FILE__, __LINE__, __func__, strerror(errno));
-		}
-
-		if (-1 == bind($1, p->ai_addr, p->ai_addrlen)) {
-			syslog(LOG_WARNING, "%s:%d:%s: bind: %s",
-				   __FILE__, __LINE__, __func__, strerror(errno));
-			close($1);
-			continue;
-		}
-
-		break;
-
-	}
-	freeaddrinfo(servinfo);
-
-	if (NULL == p) {
-		syslog(LOG_ERR, "%s:%d:%s: bind failed!",
-		       __FILE__, __LINE__, __func__);
-		return -1;
-	}
-
-	if (-1 == listen($1, BACKLOG)) {
-	    syslog(LOG_ERR, "%s:%d:%s: listen: %s",
-		       __FILE__, __LINE__, __func__, strerror(errno));
-		close($1);
-		return -1;
-	}
-	
-	${0}
-
-snippet accept
-options head
-abbr accept(...)
-    struct sockaddr_storage their_addr;
-    socklen_t sin_size;
-
-    sin_size = sizeof(their_addr);
-    client_fd = accept(event->data.fd, (struct sockaddr *)&their_addr, &sin_size);
-    if (client_fd < 0) {
-        syslog(LOG_WARNING, "%s:%d:%s: accept: %s",
-               __FILE__, __LINE__, __func__, strerror(errno));
-        return -1;
-    }
-
-# }}}
-
-# pthread {{{
-snippet ipthread
-options head
-abbr #include <pthread.h>
-	#include <pthread.h>
-	${0}
-snippet pthread
-options head
-abbr // pthread...
-	// NOTE TO SELF: snippets available for pthread:
-	//   * pthreadc - pthread_create
-	// Remember to #include <pthread.h> (snip 'ipthread')
-	${0}
-snippet pthreadc
-options head
-abbr pthread_create(...)
-	ret = pthread_create(
-		/* thread = */ ${1:`ProjectByFilename()`}${2:->my_task.thread},
-		/* attr = */ NULL,
-		/* function = */ ${3:my_task},
-		/* arg = */ ${4:`ProjectByFilename()`}
-	);
-	if (ret < 0) {
-		syslog(LOG_ERR, "%s:%d:%s: pthread_create: %s",
-		       __FILE__, __LINE__, __func__, strerror(ret));
-		return -1;
-	}
-# }}}
-
-# pipe {{{
-snippet pipe
-options head
-abbr pipe(...)
-	ret = pipe(${1:`ProjectByFilename()`}${2:->my_ipc});
-	if (ret < 0) {
-		syslog(LOG_ERR, "%s:%d:%s: pipe: %s",
-			   __FILE__, __LINE__, __func__, strerror(errno));
-		return -1;
-	}
-# }}}
-
 
 # vim: fdm=marker
