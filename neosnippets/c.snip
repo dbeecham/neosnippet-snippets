@@ -1,3 +1,55 @@
+# Templates {{{
+snippet stdc
+options head
+	// Try to not define _GNU_SOURCE or _DEFAULT_SOURCE, since those enable
+	// glibc-specific features. Being able to compile to e.g. musl or uclibc
+	// makes porting to embedded linux systems much easier (and generally
+	// pressures the programmer into stricter and better programming practices).
+	#define _POSIX_C_SOURCE 201805L
+
+	#include <stdlib.h>
+	#include <stdint.h>
+	#include <stdbool.h>
+	#include <stdio.h>
+	#include <unistd.h>
+	#include <fcntl.h>
+	#include <errno.h>
+	#include <string.h>
+	#include <syslog.h>
+	#include <sys/stat.h>
+	#include <sys/epoll.h>
+	#include <sys/signalfd.h>
+	#include <signal.h>
+	#include <pthread.h>
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <netdb.h>
+
+	#include "`ProjectName()`.h"
+
+	${0}
+snippet stdh
+options head
+	#pragma once
+
+	#include <stdlib.h>
+	#include <stdint.h>
+	#include <stdbool.h>
+	#include <unistd.h>
+	#include <fcntl.h>
+	#include <errno.h>
+	#include <string.h>
+	#include <syslog.h>
+	#include <sys/stat.h>
+	#include <sys/epoll.h>
+	#include <sys/signalfd.h>
+	#include <signal.h>
+	#include <pthread.h>
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <netdb.h>
+# }}}
+
 # Control structures {{{
 snippet     if
 options     head
@@ -87,12 +139,13 @@ snippet f
 		return 0;
 	}
 
-snippet     struct
-options     head
-abbr        struct {}
-    struct ${1:#:name} {
-        ${0:TARGET:data}
-    };
+snippet struct
+options head
+abbr struct {}
+	struct ${1:#:name} {
+	    uint8_t sentinel;
+	    ${0:TARGET:data}
+	};
 
 snippet     enum
 options     head
@@ -102,14 +155,16 @@ abbr        enum {}
     };
 
 # hard-tab is necessary; C indent doesn't support this.
-snippet     main
-options     head
-	int main(int argc, char const* argv[])
+snippet main
+options head
+	int main (
+	    int argc,
+	    char const* argv[]
+	)
 	{
-		${0:TARGET}
-		return 0;
+	    ${0:TARGET}
+	    return 0;
 	}
-
 # }}}
 
 # Preprocessing directives {{{
