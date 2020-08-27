@@ -433,6 +433,7 @@ snippet epd
 		syslog(LOG_ERR, "%s:%d:%s: epoll_ctl: %s", __FILE__, __LINE__, __func__, strerror(errno));
 		return -1;
 	}
+    ${0}
 snippet epm
 	ret = epoll_ctl(
 		${1:epoll_fd},
