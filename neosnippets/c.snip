@@ -172,13 +172,13 @@ options head
 snippet     inc
 options     head
 alias       #inc, #include
-    #include <${1:stdio}.h>
+    #include <${1:stdio.h}${0}
 
 # #include "..."
 snippet     Inc
 options     head
 alias       #Inc
-    #include "${1}.h"
+    #include "${1}.h"${0}
 
 snippet     ifdef
 options     head
@@ -301,7 +301,7 @@ abbr    va_start(va_list, last_arg); ... ; va_end()
 # syslog {{{
 snippet openlog
 options head
-	openlog("${1:`ProjectName()`}", LOG_CONS | LOG_PID, LOG_USER);
+	openlog("${1:`ProjectName()`}", LOG_CONS | LOG_PID, LOG_USER);${0}
 snippet syslog
 options head
 	// NOTE TO SELF: snippets available for syslog:
@@ -394,6 +394,7 @@ options head
 	//   * epm - modify (re-arm) fd in epoll
 	//   * epw - main epoll_wait loop
 	// To use epoll, remember to #include <sys/epoll.h> (snip 'iepoll')
+    ${0}
 snippet epc
 	// Create the epoll instance
 	${1:`ProjectName()`->epoll_fd} = epoll_create1(EPOLL_CLOEXEC);
@@ -418,6 +419,7 @@ snippet epa
 		syslog(LOG_ERR, "%s:%d:%s: epoll_ctl: %s", __FILE__, __LINE__, __func__, strerror(errno));
 		return -1;
 	}
+	${0}
 snippet epd
 	// Remember to EPOLL_CTL_DEL *before* closing the file descriptor, see
 	// https://idea.popcount.org/2017-03-20-epoll-is-fundamentally-broken-22/
@@ -491,6 +493,227 @@ snippet epdisp
 
 		syslog(LOG_WARNING, "%s:%d:%s: No match on epoll event.", __FILE__, __LINE__, __func__);
 		return 0;
+	}
+	${0}
+# }}}
+
+# linux file io {{{
+snippet open
+options head
+	// open(2) flags:
+	//   O_RDONLY   - read only
+	//   O_WRONLY   - write only
+	//   O_RDWR     - read/write
+	//   O_CREAT    - create if does not exist (see open(2))
+	//   O_EXCL     - use with O_CREAT to guarantee creation of file
+	//   O_SYNC     - write(2) will sync to hardware before returning
+	//   O_DIRECT   - try to not cache reads and writes (probably use O_SYNC instead)
+	//   O_APPEND   - atomically append to file (seeking -> writing is not atomic)
+	//   O_ASYNC    - use signal-driven I/O; default is SIGIO (warning!)
+	//   O_CLOEXEC  - closes the file on exec() - just do it.
+	//                this interacts badly with threads, signal will be sent to
+	//                random thread in the program. If signal-driven I/O is
+	//                wanted, then change the signal to some real-time signal,
+	//                and implement synchronous signal handing using
+	//                sigwaitinfo(2).
+	//   O_NONBLOCK - open in non-blocking mode - is generally a good idea to prevent deadlock
+	//   O_TMPFLIE  - create temporary file; filename specifies directory.
+	${1:`ProjectName()`->fd} = open(
+		/* path  = */ ${2:"/dev/urandom"},
+		/* flags = */ ${3:O_RDONLY} | O_CLOEXEC | O_NONBLOCK
+	);
+	if (-1 == $1) {
+		syslog(LOG_ERR, "%s:%d:%s: open: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+# }}}
+
+# tcp server {{{
+snippet server
+options head
+	// tcp or udp
+	${0}
+snippet tcp
+options head
+	// NOTE TO SELF:
+	// remember to include netinet/in.h, arpa/inet.h, netdb.h, sys/socket.h
+	struct addrinfo *servinfo, *p;
+	ret = getaddrinfo(
+		/* host = */ HOST,
+		/* port = */ PORT, 
+		/* hints = */ &(struct addrinfo) {
+			.ai_family = AF_UNSPEC,
+			.ai_socktype = SOCK_STREAM
+		},
+		/* servinfo = */ &servinfo
+	);
+	if (0 != ret) {
+		syslog(LOG_ERR, "%s:%d:%s: getaddrinfo: %s", __FILE__, __LINE__, __func__, gai_strerror(ret));
+		return -1;
+	}
+
+	// Loop over the results from getaddrinfo and try to bind them up.
+	for (p = servinfo; p != NULL; p = p->ai_next) {
+
+		// Create a socket
+		${1:`ProjectName()`->tcp_fd} = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (-1 == $1) {
+			syslog(LOG_WARNING, "%s:%d:%s: socket: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			// let's try the next entry...
+			continue;
+		}
+
+		// Set the socket REUSEADDR - this makes sure that we can start the
+		// application after a restart even if the socket is still registered
+		// in the kernel by the old application due to stale connections from
+		// clients.
+		ret = setsockopt($1, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+		if (-1 == ret) {
+			syslog(LOG_WARNING, "%s:%d:%s: setsockopt: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			// We don't care if this doesn't work so much - we can run without REUSEADDR.
+		}
+
+		// Bind the socket to the port
+		ret = bind($1, p->ai_addr, p->ai_addrlen);
+		if (-1 == ret) {
+			// Ok, we couldn't bind this socket - close this socket and try the
+			// next hit from getaddrinfo.
+			syslog(LOG_WARNING, "%s:%d:%s: bind: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			close($1);
+			continue;
+		}
+
+		// If we get here, it means that we've successfully bound up a tcp
+		// socket. We don't need to try any more results from getaddrinfo.
+		// Break out of the loop.
+		break;
+	}
+	// Remember to free up the servinfo data!
+	freeaddrinfo(servinfo);
+
+	// If p is NULL, it means that the above loop went through all of the
+	// results from getaddrinfo and never broke out of the loop - so we have no
+	// valid socket.
+	if (NULL == p) {
+		syslog(LOG_ERR, "%s:%d:%s: failed to bind to any address", __FILE__, __LINE__, __func__);
+		return -1;
+	}
+
+	// At this point, we have successfully bound up a port. Now we just need to
+	// listen for connection on the port.
+	ret = listen($1, TCP_LISTEN_BACKLOG);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: listen: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet udp
+options head
+	// NOTE TO SELF:
+	// remember to include netinet/in.h, arpa/inet.h, netdb.h, sys/socket.h
+	struct addrinfo *servinfo, *p;
+	ret = getaddrinfo(
+		/* host = */ HOST,
+		/* port = */ PORT, 
+		/* hints = */ &(struct addrinfo) {
+			.ai_family = AF_UNSPEC,
+			.ai_socktype = SOCK_DGRAM
+		},
+		/* servinfo = */ &servinfo
+	);
+	if (0 != ret) {
+		syslog(LOG_ERR, "%s:%d:%s: getaddrinfo: %s", __FILE__, __LINE__, __func__, gai_strerror(ret));
+		return -1;
+	}
+
+	// Loop over the results from getaddrinfo and try to bind them up.
+	for (p = servinfo; p != NULL; p = p->ai_next) {
+
+		// Create a socket
+		${1:`ProjectName()`->udp_fd} = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (-1 == $1) {
+			syslog(LOG_WARNING, "%s:%d:%s: socket: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			// let's try the next entry...
+			continue;
+		}
+
+		// Set the socket REUSEADDR - this makes sure that we can start the
+		// application after a restart even if the socket is still registered
+		// in the kernel by the old application due to stale connections from
+		// clients.
+		ret = setsockopt($1, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+		if (-1 == ret) {
+			syslog(LOG_WARNING, "%s:%d:%s: setsockopt: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			// We don't care if this doesn't work so much - we can run without REUSEADDR.
+		}
+
+		// Bind the socket to the port
+		ret = bind($1, p->ai_addr, p->ai_addrlen);
+		if (-1 == ret) {
+			// Ok, we couldn't bind this socket - close this socket and try the
+			// next hit from getaddrinfo.
+			syslog(LOG_WARNING, "%s:%d:%s: bind: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			close($1);
+			continue;
+		}
+
+		// If we get here, it means that we've successfully bound up a tcp
+		// socket. We don't need to try any more results from getaddrinfo.
+		// Break out of the loop.
+		break;
+	}
+	// Remember to free up the servinfo data!
+	freeaddrinfo(servinfo);
+
+	// If p is NULL, it means that the above loop went through all of the
+	// results from getaddrinfo and never broke out of the loop - so we have no
+	// valid socket.
+	if (NULL == p) {
+		syslog(LOG_ERR, "%s:%d:%s: failed to bind to any address", __FILE__, __LINE__, __func__);
+		return -1;
+	}
+
+	// Time to add udp_fd to epoll!
+
+	${0}
+# }}}
+
+# timerfd {{{
+snippet timerfd
+options head
+	// NOTE TO SELF: snippets available for timerfd:
+	//   * timerfdc - create a timerfd
+	//   * timerfds - timerfd_settime
+	// Remember to #include <sys/timerfd.h> (snip 'itimerfd')
+	${0}
+snippet timerfdc
+options head
+	// create timerfd
+	${1:`ProjectName()`->nats_watchdog} = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC);
+	if (-1 == $1) {
+		syslog(LOG_ERR, "%s:%d:%s: timerfd_create: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet timerfds
+options head
+	// arm timerfd
+	ret = timerfd_settime(
+		/* fd        = */ ${1:`ProjectName()`->nats_watchdog},
+		/* opt       = */ 0,
+		/* timerspec = */ &(struct itimerspec) {
+			.it_interval = {0},
+			.it_value = {
+				.tv_sec  = 10,
+				.tv_nsec = 0
+			}
+		},
+		/* old_ts    = */ NULL
+	);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: timerfd_settime: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
 	}
 	${0}
 # }}}
