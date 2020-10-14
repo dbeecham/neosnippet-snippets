@@ -138,7 +138,9 @@ snippet f
 
 		return 0;
 	}
-
+snippet F
+    ${1:ret} = ${2:`ProjectName()`}${3:_init}(${4:`ProjectName()`}${5:#:,args...});
+    ${0}
 snippet struct
 options head
 abbr struct {}
@@ -343,6 +345,20 @@ snippet read
 # }}}
 
 # socket {{{
+snippet socket
+options head
+	${1:`ProjectName()`->sock_fd} = socket(${2:servinfo_p}->ai_family, $2->ai_socktype, $2->ai_protocol);
+	if (-1 == $1) {
+		syslog(LOG_WARNING, "%s:%d:%s: socket: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet getaddrinfo_a
+options head
+	a
+	${0}
+snippet tcpconnect
+options head
 	struct addrinfo *servinfo, *servinfo_p;
 	ret = getaddrinfo(
 		/* host = */ "${1:127.0.0.1}",
@@ -367,6 +383,12 @@ snippet read
 			continue;
 		}
 
+        ret = fcntl($3, F_SETFL, O_NONBLOCK);
+        if (-1 == ret) {
+            syslog(LOG_ERR, "%s:%d:%s: fcntl: %s", __FILE__, __LINE__, __func__, strerror(errno));
+            return -1;
+        }
+
 		ret = connect($3, servinfo_p->ai_addr, servinfo_p->ai_addrlen);
 		if (-1 == ret) {
 			syslog(LOG_WARNING, "%s:%d:%s: connect: %s", __FILE__, __LINE__, __func__, strerror(errno));
@@ -381,7 +403,36 @@ snippet read
 		return -1;
 	}
 	freeaddrinfo(servinfo);
-	$0
+	${0}
+snippet connect
+options head
+	ret = connect(${1:`ProjectName()`->fd}, servinfo_p->ai_addr, servinfo_p->ai_addrlen);
+	if (-1 == ret) {
+		syslog(LOG_WARNING, "%s:%d:%s: connect: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		close($1);
+		return -1;
+	}
+	${0}
+# }}}
+
+# ipcs {{{
+snippet pipe
+options head
+	// $1[0] contains the read-end of the pipe, $1[1] contains the write-end.
+	ret = pipe2(${1:`ProjectName()`->pipe_fd}, O_CLOEXEC | O_NONBLOCK);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: pipe2: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet socketpair
+options head
+	ret = socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0, ${1:`ProjectName()`->sp_fd});
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: socketpair: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
 # }}}
 
 # epoll {{{
@@ -481,6 +532,7 @@ snippet epev
 				return ret;
 			}
 		}
+		return 0;
 	}
 	${0}
 snippet epdisp
@@ -493,7 +545,7 @@ snippet epdisp
 			return `ProjectName()`_epoll_event_fd(`ProjectName()`, event);
 
 		syslog(LOG_WARNING, "%s:%d:%s: No match on epoll event.", __FILE__, __LINE__, __func__);
-		return 0;
+		return -1;
 	}
 	${0}
 # }}}
@@ -680,6 +732,124 @@ options head
 	${0}
 # }}}
 
+# signal {{{
+snippet signal
+options head
+	// NOTE TO SELF: snippets available for signal
+	//  * sigblock - block signal
+	//  * sigw
+	//  * sigemptyset
+	//  * sigaddset
+	//  * sigprocmask
+	//  * signalfd
+	//  * readsignalfd
+	//  * signalfdread
+	//  * sigqueue - send signal
+	${0}
+snippet sigqueue
+options head
+	ret = sigqueue(
+		/* pid = */ ${1:getpid()},
+		/* sig = */ ${2:SIGRTMIN},
+		/* sigval = */ (union sigval) {
+			.sival_int = 1
+		}
+	);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigqueue: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+snippet sigemptyset
+options head
+	ret = sigemptyset(${1:&`ProjectName()`->sigset});
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigemptyset: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet sigaddset
+options head
+	ret = sigaddset(${1:&`ProjectName()`->sigset}, ${2:SIGPIPE});
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet sigprocmask
+options head
+	ret = sigprocmask(
+		/* how = */ SIG_BLOCK,
+		/* set = */ ${1:&`ProjectName()`->sigset}, 
+		/* old = */ NULL
+	);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigprocmask: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet sigblock
+options head
+	ret = sigemptyset(${1:&`ProjectName()`->sigset});
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigemptyset: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
+	ret = sigaddset($1, SIGPIPE);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
+	ret = sigaddset($1, SIGINT);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigaddset: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
+	ret = sigprocmask(
+		/* how = */ SIG_BLOCK,
+		/* set = */ $1, 
+		/* old = */ NULL
+	);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: sigprocmask: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+
+	${0}
+snippet signalfd
+options head
+	${1:`ProjectName()`->signal_fd} = signalfd(
+		/* fd = */ -1,
+		/* &sigset = */ ${2:&`ProjectName()`->sigset},
+		/* flags = */ SFD_CLOEXEC | SFD_NONBLOCK
+	);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: signalfd: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet signalfdread
+alias readsignalfd
+options head
+	struct signalfd_siginfo siginfo = {0};
+	bytes_read = read(${1:`ProjectName()`->signal_fd}, ${2:&siginfo}, sizeof(struct signalfd_siginfo));
+	if (-1 == bytes_read) {
+		syslog(LOG_ERR, "%s:%d:%s: read: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	if (0 == bytes_read) {
+		syslog(LOG_ERR, "%s:%d:%s: signal_fd closed!", __FILE__, __LINE__, __func__);
+		return -1;
+	}
+	if (sizeof(struct signalfd_siginfo) != bytes_read) {
+		syslog(LOG_ERR, "%s:%d:%s: read unusal number of bytes from signalfd!", __FILE__, __LINE__, __func__);
+		return -1;
+	}
+}
+# }}}
+
 # timerfd {{{
 snippet timerfd
 options head
@@ -717,6 +887,11 @@ options head
 		return -1;
 	}
 	${0}
+snipppet timerfdread
+alias readtimerfd
+options head
+	uint64_t num_expirations;
+	int bytes_read = read(timerfd, &num_expirations, sizeof(uint64_t));
 # }}}
 
-# vim: fdm=marker
+# vim: fdm=marker noexpandtab
