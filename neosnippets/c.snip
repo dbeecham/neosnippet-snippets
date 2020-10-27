@@ -848,6 +848,84 @@ options head
 		return -1;
 	}
 }
+snippet sigwait
+alias sigw
+options head
+	int gwyinit_sigwait (
+			struct gwyinit_s * gwyinit
+	)
+	{
+		int ret;
+
+		siginfo_t siginfo;
+		int signal_number = 0;
+		for (signal_number = sigwaitinfo(&gwyinit->sigset, &siginfo);
+			 signal_number != -1;
+			 signal_number = sigwaitinfo(&gwyinit->sigset, &siginfo))
+		{
+			syslog(LOG_INFO, "%s:%d:%s: signal %d cought...",
+					__FILE__, __LINE__, __func__, signal_number);
+
+			// snippet: sigwaitdisp
+			ret = gwyinit_sigwait_dispatch(gwyinit, &siginfo);
+			if (ret < 0) {
+				syslog(LOG_WARNING, "%s:%d:%s: gwyinit_sigwait_dispatch returned %d",
+					   __FILE__, __LINE__, __func__, ret);
+				return -1;
+			}
+		}
+		if (-1 == signal_number) {
+			syslog(LOG_ERR, "%s:%d:%s: sigwaitinfo: %s",
+					__FILE__, __LINE__, __func__, strerror(errno));
+			return -1;
+		}
+
+		return 0;
+	}
+snippet sigwaitdisp
+options head
+	int gwyinit_sigwait_dispatch (
+		struct gwyinit_s * gwyinit,
+		siginfo_t * siginfo
+	)
+	{
+
+		fprintf(stderr, "sigwait with signal no %d\n\n", siginfo->si_signo);
+
+		switch (siginfo->si_signo) {
+
+			case SIGCHLD: {
+				// A child terminated. Let's reap it and continue.
+				int child_ret;
+				pid_t child_pid;
+
+				child_pid = waitpid(-1, &child_ret, WNOHANG);
+				if (child_pid < 0) {
+					syslog(LOG_WARNING, "%s:%d:%s: waitpid: %s",
+						   __FILE__, __LINE__, __func__, strerror(errno));
+					return 0;
+				}
+
+				syslog(LOG_INFO, "%s:%d:%s: child returned with exit code %d",
+					   __FILE__, __LINE__, __func__, child_ret);
+				return 0;
+
+			}
+
+			default: {
+				syslog(LOG_WARNING, "%s:%d:%s: switch-case defaulted!",
+					   __FILE__, __LINE__, __func__);
+				return -1;
+			}
+		}
+
+		// We should never reach this, if we do then we've made a mistake.
+		syslog(LOG_ERR, "%s:%d:%s: reached dead code!",
+			   __FILE__, __LINE__, __func__);
+		return -1;
+
+		(void)gwyinit;
+	}
 # }}}
 
 # timerfd {{{
