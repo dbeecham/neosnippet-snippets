@@ -207,9 +207,18 @@ alias       #def, #define
 # }}}
 
 # Built-in function calls {{{
+snippet snprintf
+options head
+	bytes_written = snprintf(${1:buf}, ${2:buf_len}, "${3:FORMAT STRING}"${4:#:, args...});
+	if (-1 == bytes_written) {
+		syslog(LOG_WARNING, "%s:%d:%s: snprintf: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
 snippet printf
 abbr    printf("...\n", ...);
-    printf("${1}\n"${2});
+    printf("%s:%d:%s: ${1}\n", __FILE__, __LINE__, __func__${2:#:,...});
+	${0}
 
 snippet scanf
 abbr    scanf("...", ...);
@@ -264,6 +273,24 @@ abbr    realloc(old, size)
 
 snippet seed_rand
     srand(time(NULL));
+
+snippet bsearch
+options head
+	// A needle to search for in the haystack; needs to be able to be compared
+	// to items in the key-value list using the compare function (bsearch_cmp).
+	struct ${1:item_s} key = {"${2:key}", 0};
+	struct $1 * needle = bsearch(
+		/* key = */ &key,
+		/* haystack = */ ${3:`ProjectName()`->kv}, 
+		/* haystack_len = */ ${4:$3_len},
+		/* item size = */ ${5:sizeof(*$3)},
+		/* cmp_cb = */ ${6:`ProjectName()`_cmp}
+	);
+	if (NULL == needle) {
+		syslog(LOG_INFO, "%s:%d:%s: item not found", __FILE__, __LINE__, __func__);
+		return -1;
+	}
+	${0}
 # }}}
 
 # Built-in operators and alias {{{
@@ -319,7 +346,7 @@ options head
 	syslog(LOG_ERR, "%s:%d:%s: ${1:msg}", __FILE__, __LINE__, __func__${2:#:, strerror(errno), ...});${0}
 snippet warn
 options head
-	syslog(LOG_WARNING, "%s:%d:%s: ${1:func}: %s", __FILE__, __LINE__, __func__, strerror(errno));${0}
+	syslog(LOG_WARNING, "%s:%d:%s: ${1:msg}", __FILE__, __LINE__, __func__${2:#:,, strerror(errno), ...});${0}
 snippet info
 options head
 	syslog(LOG_INFO, "%s:%d:%s: ${1:#:msg}", __FILE__, __LINE__, __func__${2:#:, args...});${0}
@@ -342,6 +369,124 @@ snippet read
         ${4}
     }
     ${0}
+snippet close
+	ret = close(${1:fd});
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: close: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet exit
+options head
+	exit(EXIT_FAILURE);
+# }}}
+
+# dirent {{{
+snippet dir
+options head
+	// snippets related to directories:
+	//  * opendir - open a directory
+	//  * readdir - readdir loop
+	//  * rewinddir
+	//  * dirfd - get directory fd for use in readat() et al
+	//  * nftw - new file tree walking
+snippet opendir
+options head
+	DIR * ${1:dir} = opendir("${2:#:path...}");
+	if (NULL == $1) {
+		syslog(LOG_ERR, "%s:%d:%s: opendir: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet readdir
+alias readdir_r
+options head
+	struct dirent * dirent;
+	// this loop is just here as a best-practice to avoid infinite loops
+	for (int i = 0; i < ${1:1024}; i++) {
+		errno = 0;
+		dirent = readdir(dir);
+		if (NULL == dirent && errno != 0) {
+			syslog(LOG_ERR, "%s:%d:%s: readdir: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			return -1;
+		}
+		if (NULL == dirent) {
+			// read all directory entries, all done.
+			break;
+		}
+
+		// do something with the dirent entry, like lstat() to figure out the
+		// file type
+		${0}
+	}
+snippet rewinddir
+options head
+	rewinddir(${1:dir});
+	${0}
+snippet dirfd
+options head
+	${1:dir_fd} = dirfd(${2:dir});
+	${0};
+snippet nftw
+options head
+	// some useful flags:
+	//  * FTW_CHDIR - chdir() into directory before processing its content
+	//  * FTW_DEPTH - use post-order traversal instead of pre-order (it's always depth-first, not breadth first)
+	//  * FTW_MOUNT - dont cross over file systems
+	//  * FTW_PHYS - dont rereference symbolic links (typeflag will be FWT_SL)
+	// snippet for function is available in nftwcb
+	ret = nftw(
+		/* path = */ ${1:path...},
+		/* func = */ ${2:func...},
+		/* max open fds = */ 32,
+		/* flags = */ FTW_MOUNT
+	);
+	if (-1 == ret) {
+		// handle error
+	}
+snippet nftwcb
+options head
+	int ${1:funcname} (
+		const char * path,
+		const struct stat * stat,
+		int typeflag,
+		struct FTW *ftw
+	)
+	{
+		// typeflag can be
+		//  * FTW_D - directory
+		//  * FTW_DNR - cant be read
+		//  * FTW_DP - were doing postorder traversal, and this is a directory we've already traversed
+		//  * FTW_F - file of any other type than directory or symbolic link
+		//  * FTW_NS - calling stat() on this function failed; the value of struct stat is undefined
+		//  * FTW_SL - symbolic link
+		//  * FTW_SLN - dangling symbolic link (only occurs if FTW_PHYS was not specified)
+		// the FTW struct looks like this
+		//  struct FTW {
+		//    int base; // offset to basename part of pathname
+		//    int level; // depth of file within tree traversal
+		//  }
+	${0}
+	}
+
+# }}}
+
+# libuv {{{
+snippet uv_timer_start
+options head
+	// uv_timer_t timer_handle = {0};
+	ret = uv_timer_start(
+		/* timer = */ ${1:&}${2:timer_handle},
+		/* cb = */ ${3:cb},
+		/* initial time = */ ${4:1000},
+		/* repeat time = */ ${5:0}
+	);
+	if (ret < 0) {
+        syslog(LOG_ERR, "%s:%d:%s uv_timer_start: %s",
+                __FILE__, __LINE__, __func__, uv_strerror(ret));
+        ${5:exit(EXIT_FAILURE);}
+	}
+	${0}
 # }}}
 
 # socket {{{
@@ -580,6 +725,56 @@ options head
 		return -1;
 	}
 	${0}
+snippet noblock
+alias nonblock
+options head
+	ret = fcntl(${1:fd}, F_SETFL, O_NONBLOCK);
+	if (-1 == ret) {
+		syslog(LOG_ERR, "%s:%d:%s: fcntl: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
+	${0}
+snippet nodelay
+options head
+    ret = setsockopt(${1:fd}, IPPROTO_TCP, TCP_NODELAY, &(int){1}, sizeof(int));
+    if (-1 == ret) {
+        syslog(LOG_ERR, "%s:%d:%s: setsockopt: %s", __FILE__, __LINE__, __func__, strerror(errno));
+        return -1;
+    }
+# }}}
+
+# tcp client {{{
+snippet getaddrinfo
+options head
+	struct addrinfo *servinfo, *p;
+	ret = getaddrinfo("127.0.0.1", "3033", &hints, &servinfo);
+	if (-1 == ret) {
+		syslog(LOG_WARNING, "%s:%d:%s: getaddrinfo: %s", __FILE__, __LINE__, __func__, gai_strerror(ret));
+		return -1;
+	}
+
+	for (p = servinfo; p != NULL; p = p->ai_next) {
+		sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+		if (-1 == sockfd) {
+			syslog(LOG_WARNING, "%s:%d:%s: socket: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			continue;
+		}
+
+		ret = connect(sockfd, p->ai_addr, p->ai_addrlen);
+		if (-1 == ret) {
+			syslog(LOG_WARNING, "%s:%d:%s: connect: %s", __FILE__, __LINE__, __func__, strerror(errno));
+			close(sockfd);
+			continue;
+		}
+
+		break;
+	}
+	freeaddrinfo(servinfo);
+
+	if (NULL == p) {
+		syslog(LOG_ERR, "%s:%d:%s: connect failed", __FILE__, __LINE__, __func__);
+		return -1;
+	}
 # }}}
 
 # tcp server {{{
@@ -730,6 +925,20 @@ options head
 	// Time to add udp_fd to epoll!
 
 	${0}
+snippet accept
+options head
+	${1:client_fd} = accept(
+		/* fd = */ ${2:accept_fd},
+		/* sockaddr = */ NULL,
+		/* sockaddr_len = */ NULL
+	);
+	if (-1 == $1) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+			// re-arm fd on epoll and try again
+		}
+		syslog(LOG_ERR, "%s:%d:%s: accept: %s", __FILE__, __LINE__, __func__, strerror(errno));
+		return -1;
+	}
 # }}}
 
 # signal {{{
@@ -847,7 +1056,7 @@ options head
 		syslog(LOG_ERR, "%s:%d:%s: read unusal number of bytes from signalfd!", __FILE__, __LINE__, __func__);
 		return -1;
 	}
-}
+	${0}
 snippet sigwait
 alias sigw
 options head
@@ -965,11 +1174,74 @@ options head
 		return -1;
 	}
 	${0}
-snipppet timerfdread
+snippet timerfdread
 alias readtimerfd
 options head
 	uint64_t num_expirations;
 	int bytes_read = read(timerfd, &num_expirations, sizeof(uint64_t));
+# }}}
+
+# mbedtls {{{
+snippet mbedtls_base64_decode
+options head
+	ret = mbedtls_base64_decode(
+		/* dest = */ ${1:dest},
+		/* dest_len = */ ${2:dest_len},
+		/* out_len = */ &${3:out_len},
+		/* src = */ (unsigned char*)${4:src},
+		/* src_len = */ ${5:src_len}
+	);
+	if (0 != ret) {
+		syslog(LOG_WARNING, "%s:%d:%s: mbedtls_base64_decode returned %d", __FILE__, __LINE__, __func__, ret);
+		return ${6:-1};
+	}
+	${0}
+snippet mbedtls_base64_encode
+options head
+	ret = mbedtls_base64_encode(
+		/* dest = */ ${1:dest},
+		/* dest_len = */ ${2:dest_len},
+		/* out_len = */ &${3:out_len},
+		/* src = */ (unsigned char*)${4:src},
+		/* src_len = */ ${5:src_len}
+	);
+	if (0 != ret) {
+		syslog(LOG_WARNING, "%s:%d:%s: mbedtls_base64_encode returned %d", __FILE__, __LINE__, __func__, ret);
+		return ${6:-1};
+	}
+	${0}
+# }}}
+
+# libnats {{{
+snippet nats_publish
+options head
+	ret = nats_publish(
+		/* nats = */ ${1:nats},
+		/* topic = */ ${2:topic},
+		/* topic_len = */ ${3:topic_len},
+		/* payload = */ ${4:payload},
+		/* payload_len = */ ${5:payload_len}
+	);
+	if (ret < 0) {
+		syslog(LOG_WARNING, "%s:%d:%s: nats_publish returned %d",
+				__FILE__, __LINE__, __func__, ret);
+		return ${6:-1};
+	}
+	${0}
+snippet nats_register_subscription
+options head
+	ret = nats_register_subscription(
+		/* nats = */ ${1:nats},
+		/* topic = */ ${2:topic},
+		/* topic_len = */ ${3:topic_len},
+		/* cb = */ ${4:cb}
+	);
+	if (ret < 0) {
+		syslog(LOG_ERR, "%s:%d:%s: nats_register_subscription returned %d",
+				__FILE__, __LINE__, __func__,  ret);
+		return ${5:-1};
+	}
+	${0}
 # }}}
 
 # vim: fdm=marker noexpandtab
